@@ -1,0 +1,208 @@
+// Berkas Konfigurasi Skema Prisma ORM untuk Mezona Studio
+// Menggunakan PostgreSQL dan konvensi penamaan Bahasa Indonesia murni.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------------------------------------------------
+// ENUMERASI PERAN & STATUS
+// -------------------------------------------------------------
+
+enum PeranPengguna {
+  ADMIN
+  PELATIH
+  MEMBER
+
+  @@map("peran_pengguna")
+}
+
+enum StatusKeanggotaan {
+  AKTIF
+  KADALUWARSA
+  NONAKTIF
+
+  @@map("status_keanggotaan")
+}
+
+enum StatusPemesananKelas {
+  MENUNGGU
+  DIKONFIRMASI
+  HADIR
+  DIBATALKAN
+
+  @@map("status_pemesanan_kelas")
+}
+
+enum StatusPembayaran {
+  MENUNGGU_KONFIRMASI
+  DISETUJUI
+  DITOLAK
+
+  @@map("status_pembayaran")
+}
+
+enum JenisKelamin {
+  PRIA
+  WANITA
+
+  @@map("jenis_kelamin")
+}
+
+// -------------------------------------------------------------
+// TABEL UTAMA PENGGUNA & AUTENTIKASI
+// -------------------------------------------------------------
+
+model Pengguna {
+  id              String        @id @default(uuid()) @map("id")
+  email           String        @unique @map("email")
+  kata_sandi      String        @map("kata_sandi")
+  peran           PeranPengguna @default(MEMBER) @map("peran")
+  aktif           Boolean       @default(true) @map("aktif")
+  dibuat_pada     DateTime      @default(now()) @map("dibuat_pada")
+  diperbarui_pada DateTime      @updatedAt @map("diperbarui_pada")
+
+  // Relasi
+  profil               Profil?
+  kelas_diajar         Kelas[]          @relation("PelatihKelas")
+  pemesanan_kelas_saya PemesananKelas[] @relation("PemesananMember")
+  daftar_pembayaran    Pembayaran[]     @relation("PembayaranMember")
+
+  @@map("pengguna")
+}
+
+// -------------------------------------------------------------
+// TABEL PROFIL MEMBER & PELATIH
+// -------------------------------------------------------------
+
+model Profil {
+  id                    String            @id @default(uuid()) @map("id")
+  id_pengguna           String            @unique @map("id_pengguna")
+  nama_lengkap          String            @map("nama_lengkap")
+  nomor_telepon         String?           @map("nomor_telepon")
+  foto_profil           String?           @map("foto_profil")
+  jenis_kelamin         JenisKelamin?     @map("jenis_kelamin")
+  tanggal_lahir         DateTime?         @map("tanggal_lahir")
+  alamat                String?           @map("alamat")
+  status_keanggotaan    StatusKeanggotaan @default(NONAKTIF) @map("status_keanggotaan")
+  tanggal_kadaluwarsa   DateTime?         @map("tanggal_kadaluwarsa")
+  id_paket_keanggotaan  String?           @map("id_paket_keanggotaan")
+  kelas_pilihan         String?           @map("kelas_pilihan")
+  dibuat_pada           DateTime          @default(now()) @map("dibuat_pada")
+  diperbarui_pada       DateTime          @updatedAt @map("diperbarui_pada")
+
+  // Relasi
+  pengguna          Pengguna          @relation(fields: [id_pengguna], references: [id], onDelete: Cascade)
+  paket_keanggotaan PaketKeanggotaan? @relation(fields: [id_paket_keanggotaan], references: [id], onDelete: SetNull)
+
+  @@map("profil")
+}
+
+// -------------------------------------------------------------
+// TABEL PAKET KEANGGOTAAN GYM
+// -------------------------------------------------------------
+
+model PaketKeanggotaan {
+  id              String   @id @default(uuid()) @map("id")
+  nama_paket      String   @map("nama_paket")
+  deskripsi       String?  @map("deskripsi")
+  harga           Decimal  @db.Decimal(12, 2) @map("harga")
+  durasi_hari     Int      @map("durasi_hari")
+  keuntungan      String[] @default([]) @map("keuntungan")
+  aktif           Boolean  @default(true) @map("aktif")
+  dibuat_pada     DateTime @default(now()) @map("dibuat_pada")
+  diperbarui_pada DateTime @updatedAt @map("diperbarui_pada")
+
+  // Relasi
+  daftar_profil     Profil[]
+  daftar_pembayaran Pembayaran[]
+
+  @@map("paket_keanggotaan")
+}
+
+// -------------------------------------------------------------
+// TABEL JADWAL KELAS GYM
+// -------------------------------------------------------------
+
+model Kelas {
+  id                 String   @id @default(uuid()) @map("id")
+  nama_kelas         String   @map("nama_kelas")
+  kategori           String?  @map("kategori")
+  deskripsi          String?  @map("deskripsi")
+  harga              Decimal  @default(50000) @db.Decimal(12, 2) @map("harga")
+  id_pelatih         String   @map("id_pelatih")
+  tanggal            DateTime? @map("tanggal")
+  hari               String   @map("hari") // e.g., "Senin", "Rabu", "Jumat"
+  jam_mulai          String   @map("jam_mulai") // e.g., "08:00"
+  jam_selesai        String   @map("jam_selesai") // e.g., "09:30"
+  kapasitas_maksimal Int      @default(20) @map("kapasitas_maksimal")
+  lokasi_ruangan     String   @default("Studio Utama") @map("lokasi_ruangan")
+  gambar_url         String?  @map("gambar_url")
+  aktif              Boolean  @default(true) @map("aktif")
+  dibuat_pada        DateTime @default(now()) @map("dibuat_pada")
+  diperbarui_pada    DateTime @updatedAt @map("diperbarui_pada")
+
+  // Relasi
+  pelatih           Pengguna         @relation("PelatihKelas", fields: [id_pelatih], references: [id], onDelete: Restrict)
+  daftar_pemesanan  PemesananKelas[]
+  daftar_pembayaran Pembayaran[]     @relation("PembayaranKelas")
+
+  @@map("kelas")
+}
+
+// -------------------------------------------------------------
+// TABEL PEMESANAN KELAS OLEH MEMBER
+// -------------------------------------------------------------
+
+model PemesananKelas {
+  id                String               @id @default(uuid()) @map("id")
+  id_pengguna       String               @map("id_pengguna")
+  id_kelas          String               @map("id_kelas")
+  tanggal_sesi      DateTime             @map("tanggal_sesi")
+  status            StatusPemesananKelas @default(DIKONFIRMASI) @map("status")
+  catatan           String?              @map("catatan")
+  waktu_check_in    DateTime?            @map("waktu_check_in")
+  dibuat_pada       DateTime             @default(now()) @map("dibuat_pada")
+  diperbarui_pada   DateTime             @updatedAt @map("diperbarui_pada")
+
+  // Relasi
+  member Pengguna @relation("PemesananMember", fields: [id_pengguna], references: [id], onDelete: Cascade)
+  kelas  Kelas    @relation(fields: [id_kelas], references: [id], onDelete: Cascade)
+
+  @@unique([id_pengguna, id_kelas, tanggal_sesi])
+  @@map("pemesanan_kelas")
+}
+
+// -------------------------------------------------------------
+// TABEL TRANSAKSI PEMBAYARAN PAKET & KELAS MEMBERSHIP
+// -------------------------------------------------------------
+
+model Pembayaran {
+  id                 String           @id @default(uuid()) @map("id")
+  id_pengguna        String           @map("id_pengguna")
+  id_paket           String?          @map("id_paket")
+  id_kelas           String?          @map("id_kelas")
+  tipe_transaksi     String           @default("PAKET") @map("tipe_transaksi") // "PAKET" | "TAMBAH_KELAS"
+  nomor_invoice      String           @unique @map("nomor_invoice")
+  jumlah_bayar       Decimal          @db.Decimal(12, 2) @map("jumlah_bayar")
+  metode_pembayaran  String           @map("metode_pembayaran")
+  bukti_pembayaran   String           @db.Text @map("bukti_pembayaran")
+  status             StatusPembayaran @default(MENUNGGU_KONFIRMASI) @map("status")
+  catatan_member     String?          @map("catatan_member")
+  catatan_admin      String?          @map("catatan_admin")
+  tanggal_konfirmasi DateTime?        @map("tanggal_konfirmasi")
+  dibuat_pada        DateTime         @default(now()) @map("dibuat_pada")
+  diperbarui_pada    DateTime         @updatedAt @map("diperbarui_pada")
+
+  // Relasi
+  pengguna Pengguna          @relation("PembayaranMember", fields: [id_pengguna], references: [id], onDelete: Cascade)
+  paket    PaketKeanggotaan? @relation(fields: [id_paket], references: [id], onDelete: Restrict)
+  kelas    Kelas?            @relation("PembayaranKelas", fields: [id_kelas], references: [id], onDelete: SetNull)
+
+  @@map("pembayaran")
+}

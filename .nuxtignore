@@ -1,0 +1,6 @@
+android/**
+dist/**
+.output/**
+.data/**
+scratch/**
+node_modules/**
